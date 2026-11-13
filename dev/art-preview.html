@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pecking Order — art preview</title>
+<link rel="stylesheet" href="../css/art.css">
+<style>
+  body { margin: 0; padding: 16px 20px 40px; font: 14px/1.4 system-ui, sans-serif; background: #f4ecdc; color: #2b2118; }
+  h2 { margin: 22px 0 8px; font-size: 18px; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  .tile { border-radius: 14px; padding: 8px; box-shadow: 0 2px 0 rgba(0,0,0,.15); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .tile small { font-size: 11px; opacity: .8; }
+  .lbl { color: #fff; font-weight: 700; text-shadow: 0 1px 0 rgba(0,0,0,.4); }
+  .s90 { width: 90px; height: 90px; }
+  .s300 { width: 300px; height: 300px; }
+  .hen-tile { width: 76px; background: #fffaf0; border-radius: 12px; padding: 6px 4px; display: flex; flex-direction: column; align-items: center; font-size: 10px; }
+  .hen-box { width: 64px; height: 64px; }
+  .dead .hen-box { filter: grayscale(1) opacity(.65); }
+  .cb40 { width: 40px; height: 57px; } .cb160 { width: 160px; height: 229px; }
+  .ic16 { width: 16px; height: 16px; } .ic32 { width: 32px; height: 32px; } .ic64 { width: 64px; height: 64px; }
+  .icon-cell { display: flex; flex-direction: column; align-items: center; gap: 4px; background: #fffaf0; border-radius: 10px; padding: 6px; font-size: 10px; }
+  .icon-cell .sizes { display: flex; gap: 6px; align-items: flex-end; }
+  button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 2px solid #2b2118; background: #ffd166; cursor: pointer; }
+  .bar { position: sticky; top: 0; background: #f4ecdc; padding: 6px 0; z-index: 2; display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <button id="toggle">Toggle ACT</button>
+  <span id="state">idle</span>
+</div>
+
+<h2>Characters (90px &amp; 300px)</h2>
+<div class="row" id="chars"></div>
+
+<h2>Hens — colours × hats</h2>
+<div class="row" id="hens"></div>
+
+<h2>Hen states</h2>
+<div class="row" id="states"></div>
+
+<h2>Card back</h2>
+<div class="row" id="backs"></div>
+
+<h2>Icons (16 / 32 / 64)</h2>
+<div class="row" id="icons"></div>
+
+<script type="module">
+  import { ROLE_IDS, ROLE_COLORS, characterSVG, henSVG, HEN_COLORS, HEN_HATS, cardBackSVG, iconSVG } from '../js/art.js';
+  const q = new URLSearchParams(location.search);
+  const only = q.get('only');
+  const $ = (id) => document.getElementById(id);
+
+  const roles = only && ROLE_IDS.includes(only) ? [only] : ROLE_IDS;
+  $('chars').innerHTML = roles.map((r) => `
+    <div class="tile charwrap" style="background:${ROLE_COLORS[r].bg}">
+      <div class="s90">${characterSVG(r)}</div><span class="lbl">${r}</span>
+    </div>
+    <div class="tile charwrap" style="background:${ROLE_COLORS[r].bg}">
+      <div class="s300">${characterSVG(r)}</div>
+    </div>`).join('');
+
+  const hens = [];
+  for (let c = 0; c < HEN_COLORS.length; c++) {
+    for (let h = 0; h < HEN_HATS.length; h++) {
+      if (q.has('allhens') || h === c || h === 0) hens.push(`<div class="hen-tile"><div class="hen-box">${henSVG({ color: c, hat: h })}</div>${HEN_COLORS[c].name}<br>${HEN_HATS[h]}</div>`);
+    }
+  }
+  $('hens').innerHTML = hens.join('');
+
+  $('states').innerHTML = ['idle', 'turn', 'think', 'hit', 'cheer', 'dead'].map((s, i) =>
+    `<div class="hen-tile ${s}"><div class="hen-box">${henSVG({ color: (i + 1) % 8, hat: (i + 2) % 8 })}</div>.${s}</div>`).join('');
+
+  $('backs').innerHTML = `<div class="cb40">${cardBackSVG()}</div><div class="cb160">${cardBackSVG()}</div>`;
+
+  const iconNames = ['corn', 'sack', 'peck', 'forage', 'barnstorm', 'crown', 'feather', 'shield', 'eye', 'swap', 'deck', 'challenge', 'knockout'];
+  $('icons').innerHTML = iconNames.map((n) => `<div class="icon-cell"><div class="sizes"><div class="ic16">${iconSVG(n)}</div><div class="ic32">${iconSVG(n)}</div><div class="ic64">${iconSVG(n)}</div></div>${n}</div>`).join('');
+
+  let act = q.has('act');
+  const apply = () => {
+    document.querySelectorAll('.charwrap').forEach((el) => el.classList.toggle('act', act));
+    $('state').textContent = act ? 'ACT' : 'idle';
+  };
+  $('toggle').onclick = () => { act = !act; apply(); };
+  apply();
+  if (q.has('pause')) {
+    // freeze all animations at a given time (ms) for deterministic screenshots
+    const t = Number(q.get('pause'));
+    document.getAnimations().forEach((a) => { a.pause(); a.currentTime = t; });
+  }
+  window.__ready = true;
+</script>
+</body>
+</html>

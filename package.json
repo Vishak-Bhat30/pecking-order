@@ -1,0 +1,6 @@
+{
+  "name": "pecking-order",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test/engine.fuzz.mjs" }
+}

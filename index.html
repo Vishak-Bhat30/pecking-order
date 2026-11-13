@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pecking Order — a barnyard game of bluff</title>
+  <meta name="description" content="Pecking Order: an animated online bluffing party game for 2–6 players. Create a room, share the code, and out-bluff your friends in the barnyard.">
+  <meta name="theme-color" content="#9ED8F5">
+  <meta property="og:title" content="Pecking Order — a barnyard game of bluff">
+  <meta property="og:description" content="Create a room, share the 6-letter code, and out-bluff your friends. 2–6 players, plays in the browser.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;700;800;900&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="stylesheet" href="css/art.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="on-home">
+  <div id="scene" aria-hidden="true">
+    <div class="sky"></div>
+    <div class="sun"><i></i></div>
+    <div class="cloud c1"></div><div class="cloud c2"></div><div class="cloud c3"></div><div class="cloud c4"></div>
+    <div class="hill h1"></div><div class="hill h2"></div>
+    <svg class="barn" viewBox="0 0 220 190">
+      <g stroke="#2b2118" stroke-width="4" stroke-linejoin="round">
+        <path d="M18 92 L110 22 L202 92 L202 186 L18 186 Z" fill="#B83A2E"/>
+        <path d="M30 92 L110 32 L190 92" fill="none" stroke="#fff" stroke-width="6"/>
+        <path d="M6 96 L110 14 L214 96" fill="none" stroke-width="10" stroke="#2b2118"/>
+        <path d="M6 96 L110 14 L214 96" fill="none" stroke-width="5" stroke="#8E2A21"/>
+        <rect x="88" y="58" width="44" height="30" rx="4" fill="#F6EAD3"/>
+        <path d="M88 58 L132 88 M132 58 L88 88" stroke="#B83A2E" stroke-width="3"/>
+        <rect x="70" y="112" width="80" height="74" fill="#8E2A21"/>
+        <path d="M70 112 L150 186 M150 112 L70 186" stroke="#F6EAD3" stroke-width="5"/>
+        <rect x="70" y="112" width="80" height="74" fill="none" stroke="#F6EAD3" stroke-width="5"/>
+        <path d="M110 112 V186" stroke="#F6EAD3" stroke-width="4"/>
+      </g>
+    </svg>
+    <div class="silo"><i></i></div>
+    <div class="fence"></div>
+    <div class="grass"></div>
+  </div>
+  <main id="app"></main>
+  <canvas id="fx" aria-hidden="true"></canvas>
+  <div class="reconnect-banner">Lost the connection — reconnecting…</div>
+  <noscript><p style="padding:2rem;font:600 1.2rem sans-serif">Pecking Order needs JavaScript to run.</p></noscript>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

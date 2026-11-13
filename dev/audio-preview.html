@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pecking Order — audio preview</title>
+<style>
+  body { font: 15px/1.4 system-ui, sans-serif; margin: 24px; background: #fdf6e3; color: #3b2f2f; }
+  h1 { margin: 0 0 4px; } h2 { margin: 24px 0 8px; font-size: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+  button { padding: 10px 8px; border: 2px solid #3b2f2f; border-radius: 10px; background: #fff; cursor: pointer; font: inherit; }
+  button:hover { background: #ffe8a3; } button.on { background: #9be39b; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  table { border-collapse: collapse; font: 12px ui-monospace, monospace; margin-top: 8px; }
+  td, th { border: 1px solid #c9b99a; padding: 3px 6px; text-align: right; }
+  td:first-child { text-align: left; } .bad { background: #ffb3b3; }
+  #status { font: 12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<h1>Pecking Order — audio preview</h1>
+<p>All sounds are synthesized with the Web Audio API. Click anything to unlock audio.</p>
+
+<div class="row">
+  <button id="sfx">SFX</button>
+  <button id="music">Music</button>
+  <span id="status"></span>
+</div>
+
+<h2>Music mood</h2>
+<div class="row" id="moods"></div>
+
+<h2>Sound effects</h2>
+<div class="grid" id="sounds"></div>
+
+<h2>Offline analysis</h2>
+<div class="row"><button id="analyze">Render &amp; analyze every sound</button></div>
+<div id="report"></div>
+
+<script type="module">
+import audio, { SOUND_NAMES } from '../js/audio.js';
+
+const $ = (s) => document.querySelector(s);
+const sfxBtn = $('#sfx'), musicBtn = $('#music');
+const syncToggles = () => {
+  sfxBtn.classList.toggle('on', audio.sfxOn); sfxBtn.textContent = 'SFX: ' + (audio.sfxOn ? 'on' : 'off');
+  musicBtn.classList.toggle('on', audio.musicOn); musicBtn.textContent = 'Music: ' + (audio.musicOn ? 'on' : 'off');
+  $('#status').textContent = `ctx=${audio.context ? audio.context.state : 'none'} mood=${audio.mood}`;
+};
+sfxBtn.onclick = () => { audio.setSfx(!audio.sfxOn); syncToggles(); };
+musicBtn.onclick = () => { audio.setMusic(!audio.musicOn); syncToggles(); };
+setInterval(syncToggles, 500); syncToggles();
+
+for (const m of ['menu', 'game', 'tense', 'victory', 'off']) {
+  const b = document.createElement('button'); b.textContent = m;
+  b.onclick = () => { audio.unlock(); audio.setMood(m); syncToggles(); };
+  $('#moods').append(b);
+}
+for (const n of SOUND_NAMES) {
+  const b = document.createElement('button'); b.textContent = n;
+  b.onclick = () => { audio.unlock(); audio.play(n); };
+  b.onmouseenter = () => audio.play('hover');
+  $('#sounds').append(b);
+}
+
+// ---- analysis: render each sound offline and measure it
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit;
+    if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const ar = re[i + k], ai = im[i + k], br = re[i + k + len / 2], bi = im[i + k + len / 2];
+        const tr = br * cr - bi * ci, ti = br * ci + bi * cr;
+        re[i + k] = ar + tr; im[i + k] = ai + ti; re[i + k + len / 2] = ar - tr; im[i + k + len / 2] = ai - ti;
+        const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+      }
+    }
+  }
+}
+
+function analyzeBuffer(buf) {
+  const sr = buf.sampleRate, chs = [];
+  for (let c = 0; c < buf.numberOfChannels; c++) chs.push(buf.getChannelData(c));
+  const n = chs[0].length;
+  let peak = 0, nan = 0, last = 0, first = -1;
+  const mono = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    for (const d of chs) { const v = d[i]; if (!Number.isFinite(v)) { nan++; continue; } const a = Math.abs(v); if (a > peak) peak = a; if (a > 0.002) { last = i; if (first < 0) first = i; } s += v; }
+    mono[i] = s / chs.length;
+  }
+  const len = (last + 1) / sr;
+  let sum = 0; for (let i = Math.max(0, first); i <= last; i++) sum += mono[i] * mono[i];
+  const rms = Math.sqrt(sum / Math.max(1, last - first + 1));
+  // spectrum (averaged 2048-pt frames over the active region) → 24 log bands + centroid
+  const N = 2048, bands = new Float64Array(24), edges = [];
+  for (let b = 0; b <= 24; b++) edges.push(60 * Math.pow(16000 / 60, b / 24));
+  let num = 0, den = 0;
+  for (let s = Math.max(0, first); s + N <= last + N && s < n - N; s += N) {
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) re[i] = mono[s + i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / N));
+    fft(re, im);
+    for (let k = 1; k < N / 2; k++) {
+      const f = k * sr / N, m = Math.hypot(re[k], im[k]);
+      num += f * m; den += m;
+      for (let b = 0; b < 24; b++) if (f >= edges[b] && f < edges[b + 1]) { bands[b] += m; break; }
+    }
+  }
+  const centroid = den ? num / den : 0;
+  // perceived loudness: max short-term (2048-pt, hop 1024) A-weighted level in dB (full-scale 1 kHz sine = -3 dB)
+  const W = 2048, win = new Float64Array(W); let w2 = 0;
+  for (let i = 0; i < W; i++) { win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / W); w2 += win[i] * win[i]; }
+  const aw = new Float64Array(W / 2);
+  for (let k = 1; k < W / 2; k++) {
+    const f = k * sr / W, f2 = f * f;
+    aw[k] = Math.pow((12194 ** 2 * f2 * f2) / ((f2 + 20.6 ** 2) * Math.sqrt((f2 + 107.7 ** 2) * (f2 + 737.9 ** 2)) * (f2 + 12194 ** 2)) * 1.2589, 2);
+  }
+  let maxMs = 1e-12;
+  for (let s = 0; s + W < n; s += W / 2) {
+    const re = new Float64Array(W), im = new Float64Array(W);
+    for (let i = 0; i < W; i++) re[i] = mono[s + i] * win[i];
+    fft(re, im);
+    let p = 0; for (let k = 1; k < W / 2; k++) p += (re[k] * re[k] + im[k] * im[k]) * aw[k];
+    maxMs = Math.max(maxMs, 2 * p / (W * w2));
+  }
+  const loud = 10 * Math.log10(maxMs);
+  // envelope: 32 frames across the active region
+  const env = new Float64Array(32), span = Math.max(1, last - first + 1);
+  for (let i = Math.max(0, first); i <= last; i++) { const b = Math.min(31, Math.floor((i - first) / span * 32)); env[b] += mono[i] * mono[i]; }
+  return { peak, nan, len, rms, centroid, loud, bands: Array.from(bands), env: Array.from(env).map(Math.sqrt) };
+}
+
+const unit = (v) => { const s = Math.hypot(...v) || 1; return v.map((x) => x / s); };
+const cos = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
+
+async function analyzeAll() {
+  const sr = 44100, res = {};
+  for (const name of SOUND_NAMES) {
+    const ctx = new OfflineAudioContext(2, sr * 4, sr);
+    let end = 0, err = null;
+    try { end = audio._renderTo(ctx, name); } catch (e) { err = String(e); }
+    const buf = await ctx.startRendering();
+    res[name] = { ...analyzeBuffer(buf), end, err };
+  }
+  const names = Object.keys(res), pairs = [];
+  for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++) {
+    const a = res[names[i]], b = res[names[j]];
+    const sim = 0.6 * cos(unit(a.bands), unit(b.bands)) + 0.4 * cos(unit(a.env), unit(b.env));
+    pairs.push([names[i], names[j], sim]);
+  }
+  pairs.sort((x, y) => y[2] - x[2]);
+  const music = {};
+  for (const mood of ['menu', 'game', 'tense', 'victory']) {
+    const ctx = new OfflineAudioContext(2, sr * 10, sr);
+    let err = null;
+    try { audio._renderMusic(ctx, mood, 10); } catch (e) { err = String(e); }
+    const buf = await ctx.startRendering();
+    const a = analyzeBuffer(buf);
+    music[mood] = { peak: a.peak, rms: a.rms, loud: a.loud, nan: a.nan, len: a.len, centroid: a.centroid, err };
+  }
+  return { sounds: res, topPairs: pairs.slice(0, 8), music };
+}
+window.analyzeAll = analyzeAll;
+
+$('#analyze').onclick = async () => {
+  $('#report').textContent = 'rendering…';
+  const r = await analyzeAll();
+  const fmt = (x, d = 3) => (typeof x === 'number' ? x.toFixed(d) : x);
+  let h = '<table><tr><th>sound</th><th>peak</th><th>rms</th><th>len s</th><th>centroid Hz</th><th>loud dBA</th><th>NaN</th></tr>';
+  for (const [n, a] of Object.entries(r.sounds)) {
+    const bad = a.err || a.nan || a.peak < 0.1 || a.peak > 1.0;
+    h += `<tr class="${bad ? 'bad' : ''}"><td>${n}</td><td>${fmt(a.peak)}</td><td>${fmt(a.rms)}</td><td>${fmt(a.len, 2)}</td><td>${fmt(a.centroid, 0)}</td><td>${fmt(a.loud, 1)}</td><td>${a.nan}</td></tr>`;
+  }
+  h += '</table><table><tr><th>most similar pairs</th><th>sim</th></tr>';
+  for (const [a, b, s] of r.topPairs) h += `<tr><td>${a} / ${b}</td><td>${fmt(s)}</td></tr>`;
+  h += '</table><table><tr><th>music</th><th>peak</th><th>rms</th><th>loud dBA</th><th>NaN</th></tr>';
+  for (const [m, a] of Object.entries(r.music)) h += `<tr><td>${m}</td><td>${fmt(a.peak)}</td><td>${fmt(a.rms)}</td><td>${fmt(a.loud, 1)}</td><td>${a.nan}</td></tr>`;
+  $('#report').innerHTML = h + '</table>';
+};
+</script>
+</body>
+</html>
