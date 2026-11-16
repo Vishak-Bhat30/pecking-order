@@ -107,7 +107,7 @@ function showHome(prefillCode = '') {
         <button class="btn big" id="join" type="submit">Join</button>
       </form>
       <div class="status-line" id="hstatus"></div>
-      <button class="link" id="howto">How to play</button>
+      <div class="home-links"><button class="link" id="howto">How to play</button>${isStandalone() ? '' : `<button class="link install-link" id="install">${ICON_PHONE}Install the app</button>`}</div>
     </div>
     <footer class="foot">2–6 players · 10–15 minutes · works on phones &amp; laptops</footer>
   </div>`;
@@ -120,6 +120,7 @@ function showHome(prefillCode = '') {
   $('#practice', app).addEventListener('click', () => practice());
   $('#joinf', app).addEventListener('submit', (e) => { e.preventDefault(); joinRoom(codeIn.value); });
   $('#howto', app).addEventListener('click', showRules);
+  $('#install', app)?.addEventListener('click', installApp);
   if (saved) {
     $('#resume', app).addEventListener('click', () => resumeHost(saved));
     $('#forget', app).addEventListener('click', () => { Host.clearSaved(); showHome(); });
@@ -413,17 +414,65 @@ function showRules() {
     If they really have it, they show it, shuffle it back for a fresh card, and the challenger loses a card.
     If they were bluffing, <b>they</b> lose a card and their move fails (any corn they paid comes back).</p>
     <h3>Blocks</h3>
-    <p><b>Forage</b> can be blocked by anyone claiming the Rooster. A <b>Raid</b> can be blocked by its target claiming the Goose.
-    A <b>Pilfer</b> can be blocked by its target claiming the Raccoon or the Owl. Blocks are claims too, so they can be challenged.</p>
+    <p><b>Harvest</b> can be blocked by anyone claiming the Rooster. An <b>Attack</b> can be blocked by its target claiming the Goose.
+    A <b>Snatch</b> can be blocked by its target claiming the Raccoon or the Owl. Blocks are claims too, so they can be challenged.</p>
     <h3>Losing cards</h3>
     <p>When you lose a card you choose which one, and it's turned face-up for all to see. Lost cards are useful intel: there are only <b>3 of each character</b> in the deck.</p>
     <h3>Tips</h3>
-    <ul><li>With <b>10+ corn</b> you must Barnstorm.</li><li>In a 2-player game the first player starts with 1 corn.</li>
+    <ul><li>With <b>10+ corn</b> you must use <b>Knockout</b>.</li><li>In a 2-player game the first player starts with 1 corn.</li>
     <li>If you drop out mid-game, rejoin with the same code on the same device. A bot covers you after 45 seconds.</li></ul>
   `, { cls: 'rules', onClose: () => audio.play('close') });
 }
 
 /* ================= boot ================= */
+/* ================= install as an app (PWA) ================= */
+const ICON_PHONE = '<svg viewBox="0 0 24 24" class="li-ic"><rect x="6" y="2" width="12" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v7m-3-3 3 3 3-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="18.5" r="1" fill="currentColor"/></svg>';
+const ICON_SHARE = '<svg viewBox="0 0 24 24" class="li-ic"><path d="M12 3v12M8 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 11H5v10h14V11h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
+function isStandalone() { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
+let installEvt = null;
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
+addEventListener('appinstalled', () => { installEvt = null; toast('Installed! Open Pecking Order from your home screen.'); $('#install')?.remove(); });
+
+async function installApp() {
+  audio.play('click');
+  if (installEvt) {
+    const evt = installEvt;
+    installEvt = null;
+    evt.prompt();
+    try { await evt.userChoice; } catch (e) { /* ignore */ }
+    return;
+  }
+  const ua = navigator.userAgent;
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  const android = /Android/.test(ua);
+  const iosSteps = `<div class="inst-card ${ios ? 'here' : ''}"><h3>iPhone &amp; iPad</h3><ol>
+      <li>Open this page in <b>Safari</b>.</li>
+      <li>Tap the <b>Share</b> button <span class="inl">${ICON_SHARE}</span> (bottom of the screen on iPhone).</li>
+      <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol></div>`;
+  const androidSteps = `<div class="inst-card ${android ? 'here' : ''}"><h3>Android</h3><ol>
+      <li>Open this page in <b>Chrome</b>.</li>
+      <li>Tap the <b>⋮</b> menu (top right).</li>
+      <li>Tap <b>Install app</b> or <b>Add to Home screen</b>.</li></ol></div>`;
+  const desktopSteps = `<div class="inst-card ${!ios && !android ? 'here' : ''}"><h3>Laptop / desktop</h3><ol>
+      <li>In <b>Chrome</b> or <b>Edge</b>, click the install icon at the right end of the address bar,</li>
+      <li>or open the browser menu and choose <b>Install Pecking Order</b>.</li></ol></div>`;
+  const order = ios ? [iosSteps, androidSteps, desktopSteps] : android ? [androidSteps, iosSteps, desktopSteps] : [desktopSteps, androidSteps, iosSteps];
+  audio.play('open');
+  modal(`<div class="inst-head"><img src="icons/icon-192.png" alt="" width="72" height="72"><div><h2>Get the app</h2>
+    <p>Pecking Order installs straight from your browser. No app store needed. It gets its own icon, opens full-screen, and Practice mode even works offline.</p></div></div>
+    <div class="inst-grid">${order.join('')}</div>`, { cls: 'install', onClose: () => audio.play('close') });
+}
+
+const hadSW = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === '127.0.0.1' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // a new version was installed: refresh right away if nobody is mid-game, otherwise it applies next launch
+    if (hadSW && !reloading && S.screen === 'home' && !S.session) { reloading = true; location.reload(); }
+  });
+}
+
 const urlCode = normCode(params.get('room'));
 const saved = Host.saved();
 const last = load('po_last', null);

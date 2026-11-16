@@ -196,6 +196,20 @@ body.reconnecting .reconnect-banner { transform: translate(-50%, 0); }
 .status-line { min-height: 1.3em; text-align: center; font-weight: 800; color: var(--barn-d); }
 .resume { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: #fff3c4; border: 2.5px dashed var(--ink); border-radius: 14px; padding: 8px 10px; }
 .resume span { flex: 1; font-weight: 700; }
+.home-links { display: flex; justify-content: center; gap: 6px 18px; flex-wrap: wrap; }
+.install-link { display: inline-flex; align-items: center; gap: 5px; }
+.li-ic { width: 18px; height: 18px; flex: none; }
+.inl .li-ic { vertical-align: -4px; }
+.modal.install { width: min(640px, 100%); }
+.inst-head { display: flex; gap: 14px; align-items: center; margin-bottom: 10px; }
+.inst-head img { border-radius: 18px; border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink); flex: none; }
+.inst-head h2 { margin: 0 0 .2em; }
+.inst-head p { margin: 0; color: var(--ink-2); font-weight: 700; }
+.inst-grid { display: grid; gap: 10px; }
+.inst-card { border: 2.5px solid var(--ink); border-radius: 14px; padding: 4px 14px 6px; background: #fff; opacity: .75; }
+.inst-card.here { opacity: 1; background: #fff6d6; box-shadow: 0 4px 0 var(--ink); }
+.inst-card h3 { margin: .5em 0 .2em; }
+.inst-card ol { margin: 0 0 .4em; padding-left: 1.3em; }
 .foot { margin-top: 16px; font: 600 .82rem var(--display); background: rgba(255, 248, 234, .9); border: 2px solid var(--ink); border-radius: 999px; padding: .2em .9em; }
 
 /* ============ lobby ============ */
@@ -490,4 +504,24 @@ body.reconnecting .reconnect-banner { transform: translate(-50%, 0); }
 
 @media (prefers-reduced-motion: reduce) {
   .logo span, .card-sun, #scene .cloud, #scene .sun i, .ann-glow, .hcard.choosable, .seat.targetable { animation: none !important; }
+}
+
+/* short laptop screens (e.g. 1366×768): tighten the board so the hand isn't hidden behind the action panel */
+@media (min-width: 1020px) and (max-height: 860px) {
+  .game { padding-top: 4px; }
+  .g-bar { padding-bottom: 4px; }
+  .table { padding: 10px 14px; gap: 8px; justify-content: flex-start; }
+  .seat { width: 136px; padding: 4px 6px 6px; }
+  .seat .hen-wrap { width: 52px; height: 52px; }
+  .mc { width: 32px; }
+  .center { padding: 0; }
+  .status { min-height: 54px; padding: 5px 10px; }
+  .hcard { width: clamp(100px, 8.6vw, 124px); }
+  .me-seat .hen-wrap { width: 56px; height: 56px; }
+  .hand { min-height: 0; }
+  .panel { padding: 6px 10px 8px; gap: 5px; }
+  .act-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
+  .act-btn { min-height: 46px; }
+  .ab-ic { width: 34px; height: 34px; }
+  .log { max-height: calc(100dvh - 54px); }
 }

@@ -228,12 +228,12 @@ export class GameUI {
         if (w.kind === 'blockChallenge') { main = `${N(ctx.block.blocker, 1)} ${vb(ctx.block.blocker, 'block', 'blocks')} with ${roleTag(ctx.block.role)}`; sub = 'Anyone may challenge the block'; }
         else if (w.kind === 'block') { main = `${N(ctx.actor, 1)} proved it — ${A.name}${tgt}`; sub = `${N(ctx.target, 1)} may still block`; }
         else if (ctx.claim) { main = `${N(ctx.actor, 1)} ${vb(ctx.actor, 'claim', 'claims')} ${roleTag(ctx.claim)} · ${A.name}${tgt}`; sub = A.blockedBy.length ? `Challenge it, or ${N(ctx.target)} may block` : 'Anyone may challenge'; }
-        else { main = `${N(ctx.actor, 1)} ${vb(ctx.actor, 'forage', 'forages')} for 2 corn`; sub = `Anyone may block with a ${roleTag('rooster')}`; }
+        else { main = `${N(ctx.actor, 1)} ${vb(ctx.actor, 'harvest', 'harvests')} 2 corn`; sub = `Anyone may block by claiming the ${roleTag('rooster')}`; }
         who = w.responders.map((id) => `<span class="rs ${w.passed.includes(id) ? 'ok' : ''}">${esc((this.P(id) || {}).name || '?')}</span>`).join('');
         break;
       }
       case 'lose': main = `${N(v.losing.pid, 1)} must give up a card`; break;
-      case 'exchange': main = `${N(ctx.actor, 1)} ${vb(ctx.actor, 'are', 'is')} consulting the ${roleTag('owl')}…`; break;
+      case 'exchange': main = `${N(ctx.actor, 1)} ${vb(ctx.actor, 'are', 'is')} swapping cards with the ${roleTag('owl')}…`; break;
       case 'over': main = `${N(v.winner, 1)} ${vb(v.winner, 'rule', 'rules')} the roost!`; break;
       default: main = '…';
     }
@@ -253,11 +253,11 @@ export class GameUI {
       if (this.mode && this.mode.kind === 'target') {
         const A = ACTIONS[this.mode.action];
         key = 'target:' + this.mode.action + v.turnId;
-        html = `<div class="pn-title">Who do you ${A.name.toLowerCase()}?</div><div class="pn-sub">Tap a glowing rival.</div><div class="pn-row"><button class="btn ghost" data-cancel>Cancel</button></div>`;
+        html = `<div class="pn-title">${A.ask || 'Pick a rival'}</div><div class="pn-sub">Tap a glowing rival.</div><div class="pn-row"><button class="btn ghost" data-cancel>Cancel</button></div>`;
       } else {
         const mine = me.cards.filter((c) => !c.dead).map((c) => c.role);
         key = `action:${v.turnId}:${me.coins}:${mine.join()}`;
-        html = `<div class="pn-title">Your move${pr.mustBarnstorm ? ' — <span class="warn">10+ corn: you must Barnstorm!</span>' : ''}</div>
+        html = `<div class="pn-title">Your move${pr.mustBarnstorm ? ' — <span class="warn">10+ corn: you must use Knockout!</span>' : ''}</div>
           <div class="act-grid">${ACTION_IDS.map((a) => this._actBtn(a, me, mine, pr, v)).join('')}</div>`;
       }
     } else if (pr && pr.kind === 'respond') {
@@ -265,12 +265,12 @@ export class GameUI {
       html = this._respondHTML(v, me, pr);
     } else if (pr && pr.kind === 'lose') {
       key = 'lose:' + pr.loseId;
-      const why = { challenge: 'Your challenge failed', bluff: 'You were caught bluffing', raid: 'The Fox got you', barnstorm: 'The Barnstorm hit you' }[pr.reason] || 'Ouch';
+      const why = { challenge: 'Your challenge failed', bluff: 'You were caught bluffing', raid: 'The Fox attacked you', barnstorm: 'You got knocked out' }[pr.reason] || 'Ouch';
       html = `<div class="pn-title">${why} — give up a card</div><div class="pn-sub">Tap the card you want to lose. It will be revealed to everyone.</div>`;
     } else if (pr && pr.kind === 'exchange') {
       key = 'ex:' + v.turnId;
       this.exSel = [];
-      html = `<div class="pn-title">The Owl sees all — keep ${pr.keep} card${pr.keep > 1 ? 's' : ''}</div>
+      html = `<div class="pn-title">Owl swap: keep ${pr.keep} card${pr.keep > 1 ? 's' : ''}, the rest go back</div>
         <div class="ex-row">${pr.pool.map((r, i) => `<button class="ex-card" data-ex="${i}">${cardFront(r)}<span class="ex-lbl">${i < pr.keep ? 'yours' : 'new'}</span></button>`).join('')}</div>
         <div class="pn-row"><button class="btn gold" data-exok disabled>Keep these</button></div>`;
     } else {
@@ -315,7 +315,7 @@ export class GameUI {
     if (pr.windowKind === 'blockChallenge') title = `${esc((this.P(ctx.block.blocker) || {}).name)} claims ${roleTag(ctx.block.role)} to block ${ctx.actor === this.me ? 'your' : actorName + "'s"} ${A.name}`;
     else if (pr.windowKind === 'block') title = `${actorName} really is the ${roleTag(ctx.claim)}. Block the ${A.name}?`;
     else if (ctx.claim) title = `${actorName} claims ${roleTag(ctx.claim)} to ${A.name}${ctx.target ? (onMe ? ' <b class="warn">you</b>' : ' ' + esc((this.P(ctx.target) || {}).name)) : ''}`;
-    else title = `${actorName} is foraging for 2 corn`;
+    else title = `${actorName} wants to Harvest 2 corn`;
     const btns = [];
     if (pr.canChallenge) btns.push(`<button class="btn red" data-respond="challenge"><span class="bi">${iconSVG('challenge')}</span>Challenge</button>`);
     for (const r of pr.blockRoles) {
@@ -447,7 +447,7 @@ export class GameUI {
       case 'turn': t = ''; break;
       case 'action':
         t = A.claim ? `${N(ev.actor)} claims ${roleTag(A.claim)} → ${A.name}${ev.target ? ' on ' + N(ev.target) : ''}`
-          : `${N(ev.actor)} ${A.name === 'Peck' ? 'pecks (+1)' : A.name === 'Forage' ? 'forages (+2)' : 'Barnstorms ' + N(ev.target)}`;
+          : `${N(ev.actor)} ${A.did}${ev.target ? ' ' + N(ev.target) : ''}.`;
         break;
       case 'challenge': t = `${N(ev.challenger)} challenges ${N(ev.claimant)}!`; break;
       case 'proven': t = `${N(ev.pid)} reveals a real ${roleTag(ev.role)} and draws a new card.`; break;
@@ -457,7 +457,7 @@ export class GameUI {
       case 'lose': t = `${N(ev.pid)} loses ${roleTag(ev.role)}.`; break;
       case 'eliminated': t = `${N(ev.pid)} is out of the coop!`; break;
       case 'gain': t = `${N(ev.pid)} +${ev.amount} corn.`; break;
-      case 'steal': t = `${N(ev.to)} pilfers ${ev.amount} from ${N(ev.from)}.`; break;
+      case 'steal': t = `${N(ev.to)} snatches ${ev.amount} corn from ${N(ev.from)}.`; break;
       case 'refund': t = `${N(ev.pid)} gets ${ev.amount} corn back.`; break;
       case 'foresight': t = `${N(ev.pid)} draws ${ev.count} cards.`; break;
       case 'exchanged': t = `${N(ev.pid)} returns ${ev.count} cards to the deck.`; break;
@@ -561,15 +561,15 @@ export class GameUI {
         } else if (ev.action === 'peck') {
           audio.play('peck');
           this._henFx(ev.actor, 'hit', 300);
-          fx.bubble(seat(ev.actor), 'Peck!', { ms: 1000 });
+          fx.bubble(seat(ev.actor), 'Collect +1', { ms: 1000 });
           await fx.wait(300);
         } else if (ev.action === 'forage') {
           audio.play('forage');
-          await this._announce({ icon: 'forage', title: `${nm(ev.actor)} ${ev.actor === this.me ? 'go' : 'goes'} foraging`, sub: '+2 corn — any Rooster may block', from: seat(ev.actor), tone: 'plain', hold: 900 });
+          await this._announce({ icon: 'forage', title: `${nm(ev.actor)} ${ev.actor === this.me ? 'Harvest' : 'Harvests'}!`, sub: '+2 corn — a Rooster can block it', from: seat(ev.actor), tone: 'plain', hold: 900 });
         } else if (ev.action === 'barnstorm') {
           audio.play('barnstorm');
           fx.shake(1.3, 700);
-          await this._announce({ icon: 'barnstorm', title: `${nm(ev.actor)} ${ev.actor === this.me ? 'unleash' : 'unleashes'} a Barnstorm!`, sub: `Aimed at ${tName}`, from: seat(ev.actor), tone: 'storm', hold: 900 });
+          await this._announce({ icon: 'barnstorm', title: `${nm(ev.actor)} ${ev.actor === this.me ? 'go' : 'goes'} for a Knockout!`, sub: `${tName} loses a card — no blocking`, from: seat(ev.actor), tone: 'storm', hold: 900 });
         }
         break;
       }

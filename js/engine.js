@@ -92,7 +92,7 @@ function doAction(s, p, inp) {
   if (cur(s).id !== p.id) return err('It is not your turn');
   const A = ACTIONS[inp.action];
   if (!A) return err('Unknown action');
-  if (p.coins >= MUST_BARNSTORM_AT && inp.action !== 'barnstorm') return err(`With ${MUST_BARNSTORM_AT}+ corn you must Barnstorm`);
+  if (p.coins >= MUST_BARNSTORM_AT && inp.action !== 'barnstorm') return err(`With ${MUST_BARNSTORM_AT}+ corn you must use Knockout`);
   if (A.cost && p.coins < A.cost) return err('Not enough corn');
   let target = null;
   if (A.target) {

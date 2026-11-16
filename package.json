@@ -2,5 +2,5 @@
   "name": "pecking-order",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node test/engine.fuzz.mjs" }
+  "scripts": { "test": "node test/engine.rules.mjs && node test/engine.fuzz.mjs 500", "stamp": "node tools/stamp-sw.mjs" }
 }

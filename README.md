@@ -10,13 +10,13 @@ Everyone secretly holds 2 character cards and starts with 2 corn. On your turn y
 
 | Action | Who | Effect |
 |---|---|---|
-| Peck | anyone | +1 corn |
-| Forage | anyone | +2 corn (any Rooster can block) |
-| Barnstorm | anyone | pay 7: a rival loses a card (cannot be stopped; you must do this at 10+ corn) |
-| Tribute | claim **Rooster** | +3 corn |
-| Raid | claim **Fox** | pay 3: a rival loses a card (the target can block with a Goose) |
-| Pilfer | claim **Raccoon** | steal 2 corn (the target can block with a Raccoon or Owl) |
-| Foresight | claim **Owl** | draw 2 cards, then return 2 |
+| Collect | anyone | +1 corn |
+| Harvest | anyone | +2 corn (anyone claiming the Rooster can block) |
+| Knockout | anyone | pay 7: a rival loses a card (cannot be stopped; you must do this at 10+ corn) |
+| Tax | claim **Rooster** | +3 corn |
+| Attack | claim **Fox** | pay 3: a rival loses a card (the target can block by claiming the Goose) |
+| Snatch | claim **Raccoon** | steal 2 corn (the target can block by claiming the Raccoon or Owl) |
+| Swap | claim **Owl** | draw 2 cards, keep the ones you like, put 2 back |
 
 You can claim any character, whether or not you hold it. Anyone can **challenge** a claim:
 
@@ -40,6 +40,16 @@ Blocks are claims too, so they can be challenged. Lose both cards and you're out
 - Bots you can add to any room. An optional response timer, emotes, a game log, and a rules sheet.
 - Works on phones and laptops, and respects reduced-motion settings.
 
+## Install it on your phone
+
+It's a Progressive Web App, so it installs from the browser with no app store needed:
+
+- **iPhone / iPad:** open the site in Safari, tap **Share**, then tap **Add to Home Screen**.
+- **Android:** open it in Chrome and tap **Install the app** on the home screen. You can also use the **⋮** menu and choose **Install app**.
+- **Laptop:** in Chrome or Edge, click the install icon in the address bar.
+
+The installed app opens full-screen with its own icon. Practice mode works offline.
+
 ## Run locally
 
 It's a static site with no build step:
@@ -49,6 +59,10 @@ python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
 Add `?net=relay` or `?net=p2p` to the URL to force one connection method.
+
+## Deploying changes
+
+Run `node tools/stamp-sw.mjs` before committing. It stamps `sw.js` with a hash of the app files, so installed copies pick up the new version. Then push to `main`, and GitHub Pages rebuilds in about a minute.
 
 ## Tests
 
