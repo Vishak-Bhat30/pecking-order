@@ -80,6 +80,8 @@ function lookEditor(onChange) {
 /* ================= home ================= */
 function showHome(prefillCode = '') {
   teardown();
+  keepAwake(false);
+  document.body.classList.remove('reconnecting');
   S.screen = 'home';
   document.body.className = 'on-home';
   audio.setMood('menu');
@@ -236,7 +238,11 @@ async function enterSession(session, host) {
     },
     onError: (txt) => { toast(txt, 'err'); audio.play('error'); },
     onStatus: (st) => {
-      document.body.classList.toggle('reconnecting', st === 'reconnecting');
+      const banner = $('.reconnect-banner');
+      if (banner) banner.textContent = st === 'hostAway'
+        ? 'The host switched apps or locked their phone. The game will continue when they are back…'
+        : 'Connection hiccup. Reconnecting…';
+      document.body.classList.toggle('reconnecting', st === 'reconnecting' || st === 'hostAway');
     },
     onEnd: (reason, detail) => {
       const msg = { kicked: 'The host removed you from the room.', closed: 'The host closed the room.', lost: 'Lost connection to the room.', rejected: detail || 'Could not rejoin the room.' }[reason];
@@ -272,13 +278,14 @@ function leave(force) {
 }
 
 function teardown() {
-  if (S.game) { S.game.destroy(); S.game = null; keepAwake(false); }
+  if (S.game) { S.game.destroy(); S.game = null; }
   $$('.announce, .over-back, .modal-back').forEach((x) => x.remove());
 }
 
 /* ================= lobby ================= */
 function showLobby() {
   teardown();
+  keepAwake(true);
   S.screen = 'lobby';
   document.body.className = 'on-lobby';
   audio.setMood('menu');
@@ -358,7 +365,7 @@ function renderLobby() {
           <button class="btn big gold" id="start" ${enough ? '' : 'disabled'}>Start game</button>
         </div>
         <div class="hint">${enough ? 'Everyone in? Start whenever you like.' : 'Share the code — you need at least 2 players (bots count).'}</div>
-        ${room.offline ? '' : '<div class="hint small">You are hosting: your browser runs the game, so keep this tab open until the game ends.</div>'}
+        ${room.offline ? '' : '<div class="host-warn"><b>You are the host.</b> Your phone runs the game, so keep this screen open. If you switch apps or lock the phone, the game pauses for everyone until you come back.</div>'}
       </div>` : `<div class="pn-wait"><span class="dots"><i></i><i></i><i></i></span>Waiting for the host to start the game…</div>`}`;
   $('.ed-slot', bottom).replaceWith(lookEditor(() => S.session.send({ t: 'look', look: S.look })));
   if (isHost) {
@@ -384,7 +391,7 @@ async function keepAwake(on) {
     } else if (!on && wakeLock) { await wakeLock.release(); wakeLock = null; }
   } catch (e) { /* not supported or denied */ }
 }
-document.addEventListener('visibilitychange', () => { if (S.screen === 'game') keepAwake(true); });
+document.addEventListener('visibilitychange', () => { if (S.screen === 'game' || S.screen === 'lobby') keepAwake(true); });
 
 function showGame() {
   teardown();

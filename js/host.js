@@ -5,8 +5,10 @@ import { botDecide, BOT_NAMES } from './bot.js';
 import { MAX_PLAYERS, MIN_PLAYERS } from './roles.js';
 
 const GRACE_MS = 2600;          // extra response time to cover the client-side announcement animation
-const AUTO_BOT_AFTER_MS = 45000; // a disconnected player is covered by a bot after this long
-const HEARTBEAT_LOST_MS = 13000;
+const AUTO_BOT_AFTER_MS = 60000;   // a disconnected player is covered by a bot after this long
+const LINK_DEAD_MS = 30000;        // silence on one link before we drop that link (clients ping every 4s)
+const LOBBY_FORGET_MS = 3 * 60e3;  // an offline player stays in the lobby this long before being removed
+const SLEEP_GAP_MS = 8000;         // a heartbeat this late means the host page itself was frozen
 const SAVE_KEY = 'po_host';
 const N_COLORS = 8, N_HATS = 8;
 const EVENTS_SENT = 36;
@@ -24,8 +26,10 @@ export class Host {
     this.offline = offline;
     this.self = self;
     this.onLocal = onLocal;
-    this.links = new Map();
-    this.lastSeen = new Map();
+    this.links = new Map();   // pid -> Set(link)   (a player may be connected over relay AND p2p)
+    this.seq = new Map();     // pid -> last sequence number sent
+    this.seen = new Map();    // pid -> { sid, mids: Set }  (drop duplicates arriving on a second link)
+    this.hid = Math.random().toString(36).slice(2, 10);
     this.offlineSince = new Map();
     this.botTimers = new Map();
     this.win = { id: null, t: null, deadline: 0, total: 0 };
@@ -49,7 +53,14 @@ export class Host {
       this.net = new HostNet(this.code, (link) => this._onLink(link));
       res = await this.net.start(opts);
     }
+    this._lastBeat = Date.now();
     this._hb = setInterval(() => this._heartbeat(), 2500);
+    if (!this.offline) {
+      this._vis = () => (document.visibilityState === 'visible' ? this._back() : this._away());
+      document.addEventListener('visibilitychange', this._vis);
+      addEventListener('pagehide', this._vis);
+      addEventListener('online', () => this._back());
+    }
     this._broadcastRoom();
     if (this.game) this._afterChange();
     return res;
@@ -57,31 +68,41 @@ export class Host {
 
   stop() {
     clearInterval(this._hb);
+    if (this._vis) { document.removeEventListener('visibilitychange', this._vis); removeEventListener('pagehide', this._vis); }
     for (const { t } of this.botTimers.values()) clearTimeout(t);
     clearTimeout(this.win.t);
-    for (const L of this.links.values()) { L.send({ t: 'closed' }); L.close(); }
+    for (const [pid, set] of this.links) for (const L of set) { L.send(this._wrap(pid, { t: 'closed' })); L.close(); }
+    this.links.clear();
     this.net && this.net.stop();
     if (!this.offline) { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } }
   }
 
   /* ---------- connections ---------- */
   _onLink(link) {
+    link.lastHeard = Date.now();
     link.onmessage = (m) => this._onMsg(link, m);
     link.onclose = () => {
       const pid = link.pid;
-      if (pid && this.links.get(pid) === link) {
-        this.links.delete(pid);
-        this._setConnected(pid, false);
-      }
+      const set = pid && this.links.get(pid);
+      if (!set || !set.has(link)) return;
+      set.delete(link);
+      if (!set.size) { this.links.delete(pid); this._setConnected(pid, false); }
     };
   }
 
   _onMsg(link, m) {
     if (!m || typeof m !== 'object') return;
+    link.lastHeard = Date.now();
     if (m.t === 'hello') return this._hello(link, m);
     if (!link.pid) return;
-    this.lastSeen.set(link.pid, Date.now());
     if (m.t === 'ping') { link.send({ t: 'pong' }); return; }
+    if (m.mid != null) {
+      let d = this.seen.get(link.pid);
+      if (!d || d.sid !== m.sid) { d = { sid: m.sid, mids: new Set() }; this.seen.set(link.pid, d); }
+      if (d.mids.has(m.mid)) return; // already got this one over the other link
+      d.mids.add(m.mid);
+      if (d.mids.size > 400) d.mids.delete(d.mids.values().next().value);
+    }
     this.handle(link.pid, m);
   }
 
@@ -96,45 +117,79 @@ export class Host {
       this.room.players.push(p);
       this._emoteAll(pid, 'joined');
     } else {
+      if (!p.connected) this._emoteAll(pid, 'back');
       p.connected = true;
       if (p.autoBot) {
         p.autoBot = false; p.isBot = false;
         if (this.game) E.setBot(this.game, pid, false);
       }
-      this._emoteAll(pid, 'back');
     }
     this.offlineSince.delete(pid);
-    const old = this.links.get(pid);
-    if (old && old !== link) { old.pid = null; old.close(); }
+    if (link.pid && link.pid !== pid) { const old = this.links.get(link.pid); old && old.delete(link); }
     link.pid = pid;
-    this.links.set(pid, link);
-    this.lastSeen.set(pid, Date.now());
+    let set = this.links.get(pid);
+    if (!set) { set = new Set(); this.links.set(pid, set); }
+    set.add(link);
     link.send({ t: 'welcome', pid, code: this.code, hostId: this.self.pid });
     this._broadcastRoom();
     if (this.game) this._sendGame(pid);
     this._persist();
   }
 
+  _closeLinks(pid, last) {
+    const set = this.links.get(pid);
+    if (!set) return;
+    this.links.delete(pid);
+    for (const L of set) { if (last) L.send(this._wrap(pid, last)); setTimeout(() => L.close(), last ? 250 : 0); }
+  }
+
   _setConnected(pid, on) {
     const p = this.room.players.find((x) => x.id === pid);
-    if (!p || p.isBot && !p.autoBot) return;
-    if (!on) {
-      p.connected = false;
-      this.offlineSince.set(pid, Date.now());
-      if (this.room.phase === 'lobby') {
-        // in the lobby, a dropped player simply leaves (they can rejoin with the code)
-        this.room.players = this.room.players.filter((x) => x.id !== pid);
-        this._emoteAll(pid, 'left', p.name);
-      }
-      this._broadcastRoom();
-      this._persist();
-    }
+    if (!p || (p.isBot && !p.autoBot) || on) return;
+    if (!p.connected) return;
+    p.connected = false;
+    this.offlineSince.set(pid, Date.now()); // they stay in the room; they'll usually be right back
+    this._broadcastRoom();
+    this._persist();
+  }
+
+  /** Host page hidden (phone locked / switched apps): tell everyone to hang on instead of panicking. */
+  _away() {
+    if (this._isAway) return;
+    this._isAway = true;
+    for (const p of this.room.players) if (p.id !== this.self.pid && !p.isBot) this._send(p.id, { t: 'away' });
+  }
+
+  /** Host page visible again: re-attach to the network, forgive the silence, resync everybody. */
+  _back() {
+    if (document.visibilityState !== 'visible') return;
+    this._isAway = false;
+    const now = Date.now();
+    for (const set of this.links.values()) for (const L of set) L.lastHeard = now;
+    this.net && this.net.wake();
+    for (const p of this.room.players) if (p.id !== this.self.pid && !p.isBot) this._send(p.id, { t: 'back' });
+    this._broadcastRoom();
+    this._broadcastGame();
   }
 
   _heartbeat() {
     const now = Date.now();
-    for (const [pid, L] of this.links) {
-      if (now - (this.lastSeen.get(pid) || 0) > HEARTBEAT_LOST_MS) { L.close(); }
+    const gap = now - this._lastBeat;
+    this._lastBeat = now;
+    if (gap > SLEEP_GAP_MS) {
+      // we were frozen, not them: don't punish their links for our nap
+      for (const set of this.links.values()) for (const L of set) L.lastHeard = now;
+      for (const [pid, t] of this.offlineSince) this.offlineSince.set(pid, Math.max(t, now - AUTO_BOT_AFTER_MS / 2));
+      return;
+    }
+    for (const set of this.links.values()) for (const L of [...set]) if (now - L.lastHeard > LINK_DEAD_MS) L.close();
+    if (this.room.phase === 'lobby') {
+      const gone = this.room.players.filter((p) => !p.isBot && !p.connected && p.id !== this.self.pid && now - (this.offlineSince.get(p.id) || now) > LOBBY_FORGET_MS);
+      if (gone.length) {
+        this.room.players = this.room.players.filter((p) => !gone.includes(p));
+        gone.forEach((p) => this._emoteAll(p.id, 'left', p.name));
+        this._broadcastRoom();
+      }
     }
     if (this.game && this.game.stage !== 'over') {
       for (const p of this.room.players) {
@@ -172,16 +227,18 @@ export class Host {
         return;
       }
       case 'leave': {
-        const L = this.links.get(pid);
+        if (pid === this.self.pid) return;
+        const p = this.room.players.find((x) => x.id === pid);
+        this._closeLinks(pid);
         if (this.room.phase === 'lobby') {
           this.room.players = this.room.players.filter((x) => x.id !== pid);
-          this._emoteAll(pid, 'left');
-        } else {
-          this._setConnected(pid, false);
-          this.offlineSince.set(pid, Date.now() - AUTO_BOT_AFTER_MS); // cover with a bot right away
+          this._emoteAll(pid, 'left', p && p.name);
+        } else if (p) {
+          p.connected = false;
+          this.offlineSince.set(pid, Date.now() - AUTO_BOT_AFTER_MS - 1); // cover with a bot right away
+          this._lastBeat = Date.now();
           this._heartbeat();
         }
-        if (L) { this.links.delete(pid); L.close(); }
         this._broadcastRoom();
         return;
       }
@@ -201,8 +258,7 @@ export class Host {
       }
       case 'kick': {
         if (this.room.phase !== 'lobby' || m.pid === this.self.pid) return;
-        const L = this.links.get(m.pid);
-        if (L) { L.send({ t: 'kicked' }); this.links.delete(m.pid); setTimeout(() => L.close(), 200); }
+        this._closeLinks(m.pid, { t: 'kicked' });
         this.room.players = this.room.players.filter((x) => x.id !== m.pid);
         this._broadcastRoom();
         return;
@@ -348,10 +404,18 @@ export class Host {
     for (const p of this.room.players) if (!p.isBot || p.autoBot) this._send(p.id, msg);
   }
 
+  _wrap(pid, msg) {
+    const n = (this.seq.get(pid) || 0) + 1;
+    this.seq.set(pid, n);
+    return { ...msg, _h: this.hid, _s: n };
+  }
+
   _send(pid, msg) {
     if (pid === this.self.pid) { const m = JSON.parse(JSON.stringify(msg)); setTimeout(() => this.onLocal && this.onLocal(m), 0); return; }
-    const L = this.links.get(pid);
-    if (L) L.send(msg);
+    const set = this.links.get(pid);
+    if (!set || !set.size) return;
+    const out = this._wrap(pid, msg);
+    for (const L of set) L.send(out);
   }
 
   _emoteAll(pid, id, name) {

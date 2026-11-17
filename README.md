@@ -29,10 +29,10 @@ Blocks are claims too, so they can be challenged. Lose both cards and you're out
 
 - Five original characters (Rooster, Fox, Raccoon, Owl, Goose). Each has its own idle animation and its own action animation.
 - All sound effects and the background music are synthesized in the browser with Web Audio. There are no audio files.
-- Join with a code: the host's browser runs the game.
-  - Players connect peer-to-peer over WebRTC via PeerJS.
-  - If that fails, they fall back automatically to a public MQTT relay.
-  - No server to run, so it is hosted for free on GitHub Pages.
+- Join with a code: the host's browser runs the game, with no server to run, so it is hosted for free on GitHub Pages.
+  - Each player connects over two paths at once. One is an end-to-end encrypted relay through public MQTT brokers, one of them on port 443. The other is a direct peer-to-peer WebRTC link.
+  - If one path drops, the other keeps the game going, and the dropped path re-opens in the background.
+  - Phones that sleep or switch apps are handled: the host tells everyone to wait, and players who wake up reconnect within seconds.
 - Reconnects:
   - Refresh mid-game and you rejoin automatically.
   - If the host refreshes, the room resumes.
@@ -58,7 +58,7 @@ It's a static site with no build step:
 python3 -m http.server 8000   # then open http://localhost:8000
 ```
 
-Add `?net=relay` or `?net=p2p` to the URL to force one connection method.
+Add `?net=relay` or `?net=p2p` to the URL to use only one connection path.
 
 ## Deploying changes
 

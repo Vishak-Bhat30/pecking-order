@@ -1,6 +1,6 @@
 // Pecking Order service worker: makes the game installable and lets it start offline.
 // VERSION is stamped by `node tools/stamp-sw.mjs` (a hash of every file in ASSETS) — run it before each deploy.
-const VERSION = 'e0c0e2420311';
+const VERSION = 'fd0a29f86ac7';
 const CACHE = 'po-' + VERSION;
 const RUNTIME = 'po-runtime';
 const ASSETS = [
